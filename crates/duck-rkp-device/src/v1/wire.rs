@@ -43,13 +43,13 @@ pub(super) fn decode_response(bytes: &[u8]) -> Result<Response> {
             return Err(anyhow::Error::new(DeviceRkpError::Rejected(code))
                 .context(format!("V1 AIDL: {message}")));
         }
-        2 | 3 => {
+        2..=4 => {
             let message = String::from_utf8(read_field(&mut input)?)?;
             ensure_end(&input)?;
-            let error = if status == 3 {
-                DeviceRkpError::InvalidResponse(format!("V1 AIDL: {message}"))
-            } else {
-                DeviceRkpError::Transport(format!("V1 AIDL: {message}"))
+            let error = match status {
+                3 => DeviceRkpError::InvalidResponse(format!("V1 AIDL: {message}")),
+                4 => DeviceRkpError::UnsupportedDevice(format!("V1 AIDL: {message}")),
+                _ => DeviceRkpError::Transport(format!("V1 AIDL: {message}")),
             };
             return Err(error.into());
         }

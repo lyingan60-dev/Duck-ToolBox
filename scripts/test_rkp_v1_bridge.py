@@ -26,7 +26,7 @@ public class ServiceManager {
 } """,
     "android/hardware/security/keymint/RpcHardwareInfo.java": """
 package android.hardware.security.keymint;
-public class RpcHardwareInfo { public int supportedEekCurve = Integer.getInteger("test.curve", 2); }
+public class RpcHardwareInfo { public int supportedEekCurve = Integer.getInteger("test.curve", 2); public int versionNumber = 1; }
 """,
     "android/hardware/security/keymint/MacedPublicKey.java": """
 package android.hardware.security.keymint;
@@ -43,6 +43,7 @@ public class ProtectedData { public byte[] protectedData; }
     "android/hardware/security/keymint/IRemotelyProvisionedComponent.java": """
 package android.hardware.security.keymint;
 public interface IRemotelyProvisionedComponent {
+    int getInterfaceVersion();
     RpcHardwareInfo getHardwareInfo();
     byte[] generateCertificateRequest(boolean testMode, MacedPublicKey[] keys,
             byte[] eek, byte[] challenge, DeviceInfo di, ProtectedData pd);
@@ -52,6 +53,7 @@ public interface IRemotelyProvisionedComponent {
             return new Proxy();
         }
     private static class Proxy implements IRemotelyProvisionedComponent {
+    public int getInterfaceVersion() { return Integer.getInteger("test.interfaceVersion", 2); }
     public RpcHardwareInfo getHardwareInfo() { return new RpcHardwareInfo(); }
     public byte[] generateCertificateRequest(boolean testMode, MacedPublicKey[] keys,
             byte[] eek, byte[] challenge, DeviceInfo di, ProtectedData pd) {
@@ -123,11 +125,21 @@ class BridgeContract(unittest.TestCase):
                 self.assertEqual(struct.unpack(">ii", response[:8]), (1, error))
                 self.assertIn(b"HAL rejected request", response)
 
-    def test_unavailable_service_and_unsupported_curve_are_transport_errors(self):
-        for property in ["-Dtest.missing=true", "-Dtest.curve=0"]:
-            with self.subTest(property=property):
-                response = self.run_bridge([property])
-                self.assertEqual(struct.unpack(">i", response[:4])[0], 2)
+    def test_unavailable_service_is_a_transport_error(self):
+        response = self.run_bridge(["-Dtest.missing=true"])
+        self.assertEqual(struct.unpack(">i", response[:4])[0], 2)
+
+    def test_curve_none_is_reported_as_unsupported_not_a_transport_error(self):
+        response = self.run_bridge(["-Dtest.curve=0"])
+        self.assertEqual(struct.unpack(">i", response[:4])[0], 4)
+        self.assertIn(b"CURVE_NONE (0)", response)
+
+    def test_aidl_v3_is_rejected_before_legacy_csr_even_with_nonzero_curve(self):
+        for curve in [0, 2]:
+            with self.subTest(curve=curve):
+                response = self.run_bridge(["-Dtest.interfaceVersion=3", f"-Dtest.curve={curve}"])
+                self.assertEqual(struct.unpack(">i", response[:4])[0], 4)
+                self.assertIn(b"generateCertificateRequestV2", response)
 
     def test_invalid_hal_results_have_the_invalid_response_status(self):
         for property in ["shortMac", "nullMac", "nullDevice", "emptyDevice", "largeProtected"]:

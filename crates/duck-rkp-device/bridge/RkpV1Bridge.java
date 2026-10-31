@@ -21,6 +21,7 @@ public final class RkpV1Bridge {
         File directory = new File(args[0]);
         // Status 0: MAC, DeviceInfo, ProtectedData. Status 1: AIDL error code and message.
         // Status 2: transport error. Status 3: invalid HAL response.
+        // Status 4: unsupported RKP HAL interface (not a transport failure).
         // Every byte string has a big-endian int length.
         byte[] response;
         try {
@@ -32,6 +33,8 @@ public final class RkpV1Bridge {
             if (failure.getClass().getName().equals("android.os.ServiceSpecificException")) {
                 int code = failure.getClass().getField("errorCode").getInt(failure);
                 response = errorReply(1, code, failure.toString());
+            } else if (failure instanceof UnsupportedOperationException) {
+                response = errorReply(4, 0, failure.toString());
             } else {
                 response = errorReply(2, 0, failure.toString());
             }
@@ -61,8 +64,28 @@ public final class RkpV1Bridge {
         Class<?> api = Class.forName(SERVICE);
         Object proxy = Class.forName(SERVICE + "$Stub")
                 .getMethod("asInterface", binder).invoke(null, service);
+        // AIDL interface version, not RpcHardwareInfo.versionNumber (vendor-defined).
+        // Older APK proxy classes may lack this reflection-visible method.
+        int aidlVersion = -1;
+        try {
+            aidlVersion = ((Number) api.getMethod("getInterfaceVersion").invoke(proxy)).intValue();
+        } catch (NoSuchMethodException ignored) {
+            // Keep existing V1/V2 bridge behavior on older Android proxy classes.
+        }
         Object info = api.getMethod("getHardwareInfo").invoke(proxy);
         int curve = info.getClass().getField("supportedEekCurve").getInt(info);
+        // HAL V3 removes legacy EEK and the old generateCertificateRequest method.
+        // V3 needs a separate CSR v2 flow with HAL-authenticated MacedPublicKey(s);
+        // the legacy zero-HBK software-key MAC must not be reused for this purpose.
+        if (aidlVersion >= 3) {
+            throw new UnsupportedOperationException("RKP AIDL HAL v" + aidlVersion
+                    + " requires generateCertificateRequestV2 and HAL-authenticated keys; "
+                    + "legacy V1 adapter is not compatible (EEK curve=" + curve + ")");
+        }
+        if (curve == 0) {
+            throw new UnsupportedOperationException("RKP HAL reports CURVE_NONE (0); "
+                    + "legacy V1 EEK request is not supported (AIDL version=" + aidlVersion + ")");
+        }
         byte[] eek;
         if (curve == 1) eek = p256;
         else if (curve == 2) eek = x25519;

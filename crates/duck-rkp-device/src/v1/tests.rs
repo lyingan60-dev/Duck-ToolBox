@@ -199,7 +199,11 @@ fn bridge_framing_is_bounded_exact_and_preserves_aidl_errors() {
 
 #[test]
 fn bridge_keeps_transport_and_invalid_response_errors_distinct() {
-    for (status, expected_code) in [(2u32, "ta_transport_error"), (3, "invalid_ta_response")] {
+    for (status, expected_code) in [
+        (2u32, "ta_transport_error"),
+        (3, "invalid_ta_response"),
+        (4, "unsupported_device"),
+    ] {
         let mut reply = status.to_be_bytes().to_vec();
         append(&mut reply, b"invalid DeviceInfo length");
         let error = wire::decode_response(&reply).unwrap_err();
