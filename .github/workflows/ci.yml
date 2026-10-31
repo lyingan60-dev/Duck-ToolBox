@@ -54,7 +54,9 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Test
-        run: cargo test --workspace --locked
+        # ZRAM state-lock tests can overlap with worker subprocess tests under
+        # the default parallel libtest runner and spuriously retain a lock.
+        run: cargo test --workspace --locked -- --test-threads=1
       - name: Every feature builds on its own
         run: |
           for feature in rkp rkp-device tee-attestation device-ids tricky-store play-integrity device-faker kernel-modules zram linux-env system misc; do
