@@ -64,7 +64,7 @@ public final class RkpV1Bridge {
         Class<?> api = Class.forName(SERVICE);
         Object proxy = Class.forName(SERVICE + "$Stub")
                 .getMethod("asInterface", binder).invoke(null, service);
-        // AIDL interface version, not RpcHardwareInfo.versionNumber (vendor-defined).
+        // The stable AIDL version and the hardware CSR version are distinct signals.
         // Older APK proxy classes may lack this reflection-visible method.
         int aidlVersion = -1;
         try {
@@ -73,15 +73,16 @@ public final class RkpV1Bridge {
             // Keep existing V1/V2 bridge behavior on older Android proxy classes.
         }
         Object info = api.getMethod("getHardwareInfo").invoke(proxy);
-        int curve = info.getClass().getField("supportedEekCurve").getInt(info);
+        int hardwareVersion = info.getClass().getField("versionNumber").getInt(info);
         // HAL V3 removes legacy EEK and the old generateCertificateRequest method.
         // V3 needs a separate CSR v2 flow with HAL-authenticated MacedPublicKey(s);
         // the legacy zero-HBK software-key MAC must not be reused for this purpose.
-        if (aidlVersion >= 3) {
-            throw new UnsupportedOperationException("RKP AIDL HAL v" + aidlVersion
-                    + " requires generateCertificateRequestV2 and HAL-authenticated keys; "
-                    + "legacy V1 adapter is not compatible (EEK curve=" + curve + ")");
+        if (aidlVersion >= 3 || hardwareVersion >= 3) {
+            throw new UnsupportedOperationException("RKP V3 requires generateCertificateRequestV2 "
+                    + "and HAL-authenticated keys; the legacy software-key adapter is not compatible "
+                    + "(AIDL version=" + aidlVersion + ", hardware version=" + hardwareVersion + ")");
         }
+        int curve = info.getClass().getField("supportedEekCurve").getInt(info);
         if (curve == 0) {
             throw new UnsupportedOperationException("RKP HAL reports CURVE_NONE (0); "
                     + "legacy V1 EEK request is not supported (AIDL version=" + aidlVersion + ")");

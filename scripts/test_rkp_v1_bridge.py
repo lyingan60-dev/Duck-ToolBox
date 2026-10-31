@@ -26,7 +26,7 @@ public class ServiceManager {
 } """,
     "android/hardware/security/keymint/RpcHardwareInfo.java": """
 package android.hardware.security.keymint;
-public class RpcHardwareInfo { public int supportedEekCurve = Integer.getInteger("test.curve", 2); public int versionNumber = 1; }
+public class RpcHardwareInfo { public int supportedEekCurve = Integer.getInteger("test.curve", 2); public int versionNumber = Integer.getInteger("test.hardwareVersion", 1); }
 """,
     "android/hardware/security/keymint/MacedPublicKey.java": """
 package android.hardware.security.keymint;
@@ -140,6 +140,16 @@ class BridgeContract(unittest.TestCase):
                 response = self.run_bridge(["-Dtest.interfaceVersion=3", f"-Dtest.curve={curve}"])
                 self.assertEqual(struct.unpack(">i", response[:4])[0], 4)
                 self.assertIn(b"generateCertificateRequestV2", response)
+
+    def test_hardware_v3_is_rejected_even_if_interface_version_is_old(self):
+        for version in [3, 4]:
+            with self.subTest(version=version):
+                response = self.run_bridge(["-Dtest.interfaceVersion=1",
+                                            f"-Dtest.hardwareVersion={version}",
+                                            "-Dtest.curve=2", "-Dtest.error=99"])
+                self.assertEqual(struct.unpack(">i", response[:4])[0], 4)
+                self.assertIn(b"HAL-authenticated keys", response)
+                self.assertIn(f"hardware version={version}".encode(), response)
 
     def test_invalid_hal_results_have_the_invalid_response_status(self):
         for property in ["shortMac", "nullMac", "nullDevice", "emptyDevice", "largeProtected"]:

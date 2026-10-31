@@ -83,6 +83,19 @@ changed, removed or added on its own.
     as well as the vendor library and device node. Device ID provisioning uses a separate
     TrustKernel KPH adapter described below. Real-device
     compatibility and production server acceptance for MediaTek remain unverified.
+  - **Redmi K70 Ultra / MT6989, Android 16, RKP HAL V3:** the standard V3 AIDL
+    interface cannot fulfill this software-generated private-key export goal. V3 removes
+    the legacy request and requires HAL-authenticated `MacedPublicKey` values for
+    `generateCertificateRequestV2`. Its key generation returns a private-key handle,
+    not exportable private-key bytes. The V1 bridge rejects a reported V3 interface or
+    hardware version instead of fabricating a MAC or substituting an EEK curve. The V3
+    protocol does not use EEK. A HAL-generated key may serve the normal on-device RKP
+    workflow, but does not provide this tool's exportable keybox. This conclusion is
+    based on the AOSP contract, not a test on the named device; vendor behavior and
+    server acceptance require device validation. A nonconforming vendor-specific path
+    cannot be assumed from the SoC or Android version.
+    See [AOSP RKP AIDL](https://android.googlesource.com/platform/hardware/interfaces/+/refs/heads/android16-release/security/rkp/aidl/android/hardware/security/keymint/IRemotelyProvisionedComponent.aidl)
+    and [hardware information](https://android.googlesource.com/platform/hardware/interfaces/+/refs/heads/android16-release/security/rkp/aidl/android/hardware/security/keymint/RpcHardwareInfo.aidl).
   - Select `auto`, `v1`, `v2` or `v1-native` in the WebUI or with `rkp-device provision --protocol`.
     Automatic mode tries the available methods in order: V2, AIDL V1, then native V1.
     Each failed signing, CSR validation, server request or certificate validation moves
